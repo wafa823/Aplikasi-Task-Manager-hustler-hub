@@ -1,0 +1,730 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+User, LayoutDashboard, CheckCircle2,
+Circle, Plus, Calendar, Clock,
+Trash2, LogOut, ChevronLeft, Briefcase,
+GraduationCap, Users, MoreVertical, Edit3, X, Zap
+} from 'lucide-react';
+
+// Firebase Imports
+import { initializeApp } from 'firebase/app';
+import {
+getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut,
+createUserWithEmailAndPassword, signInWithEmailAndPassword
+} from 'firebase/auth';
+import {
+getFirestore, collection, doc, setDoc, getDoc,
+onSnapshot, addDoc, updateDoc, deleteDoc
+} from 'firebase/firestore';
+
+// --- FIREBASE INITIALIZATION ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'hustlers-hub';
+
+// --- DATA & CONSTANTS ---
+const HUBS = [
+{ id: 'Kampus', title: 'Kampus & Akademik', icon: GraduationCap, color: 'text-blue-400', bg: 'bg-blue-500/10', border:
+'border-blue-500/20', accent: 'bg-blue-500' },
+{ id: 'Event', title: 'Event & Komunitas', icon: Users, color: 'text-purple-400', bg: 'bg-purple-500/10', border:
+'border-purple-500/20', accent: 'bg-purple-500' },
+{ id: 'Freelance', title: 'Kerja Sampingan', icon: Briefcase, color: 'text-amber-400', bg: 'bg-amber-500/10', border:
+'border-amber-500/20', accent: 'bg-amber-500' },
+];
+
+// --- HELPERS ---
+const getDeadlineStatus = (deadlineStr, isCompleted) => {
+if (isCompleted) return { color: 'text-slate-500', text: 'Selesai' };
+
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+const deadline = new Date(deadlineStr);
+deadline.setHours(0, 0, 0, 0);
+
+const diffTime = deadline - today;
+const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+if (diffDays < 0) return { color: 'text-red-500 font-bold' , text: 'Terlewat' }; if (diffDays===0) return {
+    color: 'text-amber-500 font-bold' , text: 'Hari Ini' }; if (diffDays <=2) return { color: 'text-amber-400' , text:
+    `${diffDays} Hari lagi` }; return { color: 'text-slate-400' , text: new
+    Date(deadlineStr).toLocaleDateString('id-ID', { day: 'numeric' , month: 'short' }) }; }; // --- ISOLATED UI
+    COMPONENTS --- const LoadingScreen=()=> (
+    <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-950 text-white">
+        <div className="w-12 h-12 border-4 border-slate-700 border-t-amber-500 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-400 animate-pulse">Menyiapkan Workspace...</p>
+    </div>
+    );
+
+    const AuthScreen = ({ onLogin, onRegister, error, onGuestLogin }) => {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLogin) {
+    onLogin(email, password);
+    } else {
+    onRegister(email, password);
+    }
+    };
+
+    return (
+    <div
+        className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950 text-white h-full relative overflow-hidden">
+        <div className="absolute top-[-10%] left-[-20%] w-64 h-64 bg-amber-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-[-10%] right-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
+
+        <div className="relative z-10 w-full max-w-sm space-y-6">
+            <div className="text-center mb-8">
+                <div
+                    className="mx-auto w-16 h-16 bg-gradient-to-tr from-amber-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20 mb-4 transform -rotate-6">
+                    <Briefcase className="w-8 h-8 text-white transform rotate-6" />
+                </div>
+                <h1 className="text-2xl font-extrabold tracking-tight">The Hustler's Hub</h1>
+                <p className="text-slate-400 text-sm mt-1">{isLogin ? 'Selamat datang kembali!' : 'Mulai perjalananmu
+                    hari ini.'}</p>
+            </div>
+
+            {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs text-center">
+                {error}
+            </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase ml-1">Email</label>
+                    <input type="email" required value={email} onChange={e=> setEmail(e.target.value)}
+                    placeholder="email@contoh.com"
+                    className="w-full mt-1 p-3 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2
+                    focus:ring-amber-500 outline-none text-white text-sm"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase ml-1">Password</label>
+                    <input type="password" required minLength={6} value={password} onChange={e=>
+                    setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full mt-1 p-3 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2
+                    focus:ring-amber-500 outline-none text-white text-sm"
+                    />
+                </div>
+                <button type="submit"
+                    className="w-full py-3 mt-2 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-lg text-sm">
+                    {isLogin ? 'Masuk' : 'Daftar Sekarang'}
+                </button>
+            </form>
+
+            <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-700"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">Atau</span>
+                <div className="flex-grow border-t border-slate-700"></div>
+            </div>
+
+            <button onClick={onGuestLogin} type="button"
+                className="w-full py-3 bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold rounded-xl hover:bg-amber-500/20 transition-colors flex items-center justify-center gap-2 text-sm">
+                <Zap size={16} />
+                Masuk Tanpa Akun (Mode Demo)
+            </button>
+
+            <div className="text-center mt-6">
+                <p className="text-xs text-slate-400">
+                    {isLogin ? 'Belum punya akun? ' : 'Sudah punya akun? '}
+                    <button type="button" onClick={()=> setIsLogin(!isLogin)} className="text-amber-500 font-semibold
+                        hover:underline">
+                        {isLogin ? 'Daftar di sini' : 'Masuk di sini'}
+                    </button>
+                </p>
+            </div>
+        </div>
+    </div>
+    );
+    };
+
+    const OnboardingScreen = ({ onSave }) => {
+    const [name, setName] = useState('');
+    return (
+    <div
+        className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950 text-white h-full relative overflow-hidden">
+        <div className="absolute top-[-10%] left-[-20%] w-64 h-64 bg-amber-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-[-10%] right-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
+
+        <div className="relative z-10 w-full max-w-sm space-y-8 text-center">
+            <div
+                className="mx-auto w-20 h-20 bg-gradient-to-tr from-amber-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20 mb-6 transform -rotate-6">
+                <User className="w-10 h-10 text-white transform rotate-6" />
+            </div>
+            <div>
+                <h1 className="text-3xl font-extrabold tracking-tight mb-2">Siapa namamu?</h1>
+                <p className="text-slate-400 text-sm">Satu tempat, untuk semua peranmu.</p>
+            </div>
+
+            <div className="space-y-4 pt-8">
+                <div className="text-left">
+                    <input type="text" value={name} onChange={(e)=> setName(e.target.value)}
+                    placeholder="Masukkan panggilanmu..."
+                    autoFocus
+                    className="w-full mt-2 p-4 bg-slate-900 border border-slate-700 rounded-xl focus:ring-2
+                    focus:ring-amber-500 focus:border-transparent outline-none transition-all text-white
+                    placeholder-slate-600"
+                    />
+                </div>
+                <button onClick={()=> onSave(name)}
+                    disabled={!name.trim()}
+                    className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl disabled:opacity-50
+                    disabled:cursor-not-allowed hover:bg-slate-200 transition-colors shadow-lg"
+                    >
+                    Mulai Perjalanan
+                </button>
+            </div>
+        </div>
+    </div>
+    );
+    };
+
+    const DashboardScreen = ({ profile, tasks, stats, onSelectHub }) => (
+    <div className="flex-1 flex flex-col bg-slate-950 text-white h-full pb-20">
+        <div className="pt-12 pb-6 px-6 bg-slate-900 rounded-b-3xl border-b border-slate-800 shadow-sm">
+            <h1 className="text-2xl font-bold">Halo, {profile?.name || 'Hustler'} 👋</h1>
+            <p className="text-slate-400 mt-1 text-sm">Pilih fokusmu hari ini.</p>
+        </div>
+
+        <div className="p-6 space-y-4 flex-1 overflow-y-auto hide-scrollbar">
+            {HUBS.map((hub) => {
+            const Icon = hub.icon;
+            return (
+            <button key={hub.id} onClick={()=> onSelectHub(hub)}
+                className={`w-full text-left p-5 rounded-2xl border ${hub.border} ${hub.bg} backdrop-blur-sm
+                transition-all active:scale-95 flex items-center justify-between group`}
+                >
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl bg-slate-950/50 ${hub.color}`}>
+                        <Icon size={24} />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-lg">{hub.title}</h3>
+                        <p className="text-slate-400 text-xs mt-1">
+                            {tasks.filter(t => t.category === hub.id && !t.isCompleted).length} Tugas Aktif
+                        </p>
+                    </div>
+                </div>
+                <div
+                    className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ChevronLeft className="w-5 h-5 rotate-180 text-slate-300" />
+                </div>
+            </button>
+            );
+            })}
+
+            <div
+                className="mt-8 p-5 bg-slate-900 border border-slate-800 rounded-2xl flex justify-between items-center">
+                <div>
+                    <h4 className="text-sm font-medium text-slate-400">Total Progress</h4>
+                    <div className="flex items-end gap-2 mt-1">
+                        <span className="text-2xl font-bold">{stats.completed}</span>
+                        <span className="text-sm text-slate-500 mb-1">/ {stats.total} Selesai</span>
+                    </div>
+                </div>
+                <div
+                    className="w-12 h-12 rounded-full border-4 border-slate-800 flex items-center justify-center relative">
+                    <svg className="w-full h-full transform -rotate-90 absolute" viewBox="0 0 36 36">
+                        <path className="text-amber-500" strokeDasharray={`${stats.total> 0 ?
+                            (stats.completed/stats.total)*100 : 0}, 100`}
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none" stroke="currentColor" strokeWidth="4"
+                            />
+                    </svg>
+                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                </div>
+            </div>
+        </div>
+    </div>
+    );
+
+    const HubScreen = ({ hub, tasks, onBack, onToggleTask, onDeleteTask, onEditTask, onOpenTaskModal }) => {
+    if (!hub) return null;
+    const filteredTasks = tasks.filter(t => t.category === hub.id);
+    const HubIcon = hub.icon;
+
+    return (
+    <div className="flex-1 flex flex-col bg-slate-950 text-white h-full">
+        <div className={`pt-12 pb-6 px-4 bg-gradient-to-b ${hub.bg} to-slate-950 relative`}>
+            <button onClick={onBack}
+                className="w-10 h-10 bg-slate-900/80 backdrop-blur rounded-full flex items-center justify-center mb-4 active:scale-90 transition-transform">
+                <ChevronLeft size={20} />
+            </button>
+            <div className="flex items-center gap-3 px-2">
+                <HubIcon className={hub.color} size={28} />
+                <h1 className="text-2xl font-bold">{hub.title}</h1>
+            </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-3">
+            {filteredTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-center text-slate-500">
+                <HubIcon size={48} className="opacity-20 mb-4" />
+                <p>Belum ada tugas di hub ini.<br />Ketuk (+) untuk mulai menambah.</p>
+            </div>
+            ) : (
+            filteredTasks.map(task => {
+            const deadlineInfo = getDeadlineStatus(task.deadline, task.isCompleted);
+            return (
+            <div key={task.id} className={`p-4 rounded-xl border ${task.isCompleted ? 'bg-slate-900/50 border-slate-800'
+                : 'bg-slate-900 border-slate-700' } flex items-start gap-3 transition-all`}>
+                <button onClick={()=> onToggleTask(task.id, task.isCompleted)}
+                    className="mt-1 flex-shrink-0 active:scale-90 transition-transform"
+                    >
+                    {task.isCompleted ?
+                    <CheckCircle2 className="text-green-500 w-6 h-6" /> :
+                    <Circle className="text-slate-500 w-6 h-6" />
+                    }
+                </button>
+                <div className="flex-1 min-w-0">
+                    <h4 className={`font-medium truncate ${task.isCompleted ? 'text-slate-500 line-through'
+                        : 'text-slate-100' }`}>
+                        {task.title}
+                    </h4>
+                    <div className="flex items-center gap-4 mt-2 text-xs">
+                        <div className={`flex items-center gap-1 ${deadlineInfo.color}`}>
+                            <Calendar size={12} />
+                            <span>{deadlineInfo.text}</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-1 opacity-60">
+                    <button onClick={()=> onEditTask(task)} className="p-2 hover:bg-slate-800 rounded-lg
+                        transition-colors">
+                        <Edit3 size={16} className="text-slate-400" />
+                    </button>
+                    <button onClick={()=> onDeleteTask(task.id)} className="p-2 hover:bg-red-900/30 rounded-lg
+                        transition-colors">
+                        <Trash2 size={16} className="text-red-400" />
+                    </button>
+                </div>
+            </div>
+            );
+            })
+            )}
+        </div>
+
+        <button onClick={onOpenTaskModal} className={`absolute bottom-24 right-6 w-14 h-14 ${hub.accent} text-white
+            rounded-2xl shadow-lg shadow-${hub.color.split('-')[1]}-500/30 flex items-center justify-center
+            active:scale-90 transition-transform z-10`}>
+            <Plus size={28} />
+        </button>
+    </div>
+    );
+    };
+
+    const ProfileScreen = ({ profile, user, stats, onLogout, onResetProfile }) => (
+    <div className="flex-1 flex flex-col bg-slate-950 text-white h-full pb-20">
+        <div className="pt-12 pb-6 px-6 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+            <h1 className="text-2xl font-bold">Profil</h1>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+            <div className="flex flex-col items-center text-center mb-8">
+                <div
+                    className="w-24 h-24 bg-gradient-to-br from-slate-800 to-slate-900 rounded-full flex items-center justify-center border-4 border-slate-800 mb-4 shadow-xl">
+                    <User size={40} className="text-slate-400" />
+                </div>
+                <h2 className="text-xl font-bold">{profile?.name}</h2>
+                <p className="text-slate-500 text-sm mt-1">ID: {user?.uid?.substring(0, 8)}...</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 text-center">
+                    <p className="text-3xl font-bold text-green-400">{stats.completed}</p>
+                    <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">Diselesaikan</p>
+                </div>
+                <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 text-center">
+                    <p className="text-3xl font-bold text-amber-400">{stats.pending}</p>
+                    <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">Tugas Aktif</p>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                <button onClick={onResetProfile}
+                    className="w-full p-4 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-3 active:bg-slate-800 transition-colors">
+                    <div className="p-2 bg-slate-800 rounded-lg">
+                        <User size={18} className="text-slate-300" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <p className="text-sm font-medium">Ulangi Onboarding (Demo)</p>
+                        <p className="text-xs text-slate-500">Hapus nama untuk mengulang</p>
+                    </div>
+                </button>
+                <button onClick={onLogout}
+                    className="w-full p-4 bg-red-500/10 rounded-xl border border-red-500/20 flex items-center justify-center gap-2 text-red-400 active:bg-red-500/20 transition-colors">
+                    <LogOut size={18} />
+                    <span className="font-medium">Keluar Akun</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    );
+
+    const TaskModal = ({ isOpen, onClose, editingTask, selectedHubId, onSaveTask }) => {
+    const [title, setTitle] = useState('');
+    const [category, setCategory] = useState('');
+    const [deadline, setDeadline] = useState('');
+
+    useEffect(() => {
+    if (isOpen) {
+    setTitle(editingTask?.title || '');
+    setCategory(editingTask?.category || selectedHubId || HUBS[0].id);
+    setDeadline(editingTask?.deadline || new Date().toISOString().split('T')[0]);
+    }
+    }, [isOpen, editingTask, selectedHubId]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || !deadline) return;
+    onSaveTask({ title, category, deadline });
+    };
+
+    return (
+    <div
+        className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end justify-center sm:items-center">
+        <div
+            className="bg-slate-900 w-full sm:w-[90%] max-w-sm rounded-t-3xl sm:rounded-3xl p-6 border-t sm:border border-slate-700 shadow-2xl animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:fade-in duration-200">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-white">{editingTask ? 'Edit Tugas' : 'Tambah Tugas'}</h2>
+                <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400">
+                    <X size={20} />
+                </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="text-xs text-slate-400 uppercase font-semibold mb-1 block">Nama Tugas</label>
+                    <input type="text" value={title} onChange={e=> setTitle(e.target.value)}
+                    placeholder="Mengerjakan laporan..."
+                    autoFocus
+                    className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white
+                    focus:border-amber-500 outline-none"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs text-slate-400 uppercase font-semibold mb-1 block">Hub (Kategori)</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {HUBS.map(hub => {
+                        const CategoryIcon = hub.icon;
+                        return (
+                        <button key={hub.id} type="button" onClick={()=> setCategory(hub.id)}
+                            className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                            category === hub.id ? `${hub.bg} border-${hub.color.split('-')[1]}-500 ${hub.color}` :
+                            'bg-slate-950 border-slate-800 text-slate-500'
+                            }`}
+                            >
+                            <CategoryIcon size={18} />
+                            <span className="text-[10px] font-medium truncate w-full text-center">{hub.id}</span>
+                        </button>
+                        );
+                        })}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="text-xs text-slate-400 uppercase font-semibold mb-1 block">Tenggat Waktu</label>
+                    <input type="date" value={deadline} onChange={e=> setDeadline(e.target.value)}
+                    className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white
+                    focus:border-amber-500 outline-none color-scheme-dark"
+                    style={{ colorScheme: 'dark' }}
+                    />
+                </div>
+
+                <button type="submit" disabled={!title.trim() || !deadline}
+                    className="w-full mt-4 py-4 bg-white text-slate-900 font-bold rounded-xl disabled:opacity-50 active:scale-95 transition-transform">
+                    {editingTask ? 'Simpan Perubahan' : 'Buat Tugas'}
+                </button>
+            </form>
+        </div>
+    </div>
+    );
+    };
+
+    // --- MAIN APPLICATION COMPONENT ---
+    export default function App() {
+    const [user, setUser] = useState(null);
+    const [profile, setProfile] = useState(null);
+    const [tasks, setTasks] = useState([]);
+
+    const [currentScreen, setCurrentScreen] = useState('auth');
+    const [selectedHub, setSelectedHub] = useState(null);
+
+    const [isLoading, setIsLoading] = useState(true);
+    const [authError, setAuthError] = useState('');
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState(null);
+
+    useEffect(() => {
+    const initAuth = async () => {
+    try {
+    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+    await signInWithCustomToken(auth, __initial_auth_token);
+    }
+    } catch (error) {
+    console.error("Auth Error:", error);
+    }
+    };
+
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    setUser(currentUser);
+    if (!currentUser) {
+    setIsLoading(false);
+    setCurrentScreen('auth');
+    }
+    });
+
+    return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+    if (!user) return;
+
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    const unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
+    if (docSnap.exists()) {
+    setProfile(docSnap.data());
+    setCurrentScreen(prev => prev === 'onboarding' ? 'dashboard' : prev);
+    } else {
+    setProfile(null);
+    }
+    setIsLoading(false);
+    }, (error) => console.error("Profile Fetch Error:", error));
+
+    const tasksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'tasks');
+    const unsubscribeTasks = onSnapshot(tasksRef, (snapshot) => {
+    const taskList = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+    }));
+    taskList.sort((a, b) => {
+    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    return new Date(a.deadline) - new Date(b.deadline);
+    });
+    setTasks(taskList);
+    }, (error) => console.error("Tasks Fetch Error:", error));
+
+    return () => {
+    unsubscribeProfile();
+    unsubscribeTasks();
+    };
+    }, [user]);
+
+    const stats = useMemo(() => {
+    const completed = tasks.filter(t => t.isCompleted).length;
+    const pending = tasks.length - completed;
+    return { completed, pending, total: tasks.length };
+    }, [tasks]);
+
+    const handleLogin = async (email, password) => {
+    setAuthError('');
+    setIsLoading(true);
+
+    // DEMO BYPASS
+    setTimeout(async () => {
+    if (email === 'wafamamul1@gmail.com' && password === 'Mamul1234') {
+    try {
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    await setDoc(profileRef, {
+    name: 'Wafa Mamul',
+    email: email,
+    createdAt: new Date().toISOString()
+    });
+    setCurrentScreen('dashboard');
+    } catch (err) {
+    console.error("Demo setup error:", err);
+    }
+    } else {
+    if (password.length >= 6) {
+    if (profile) setCurrentScreen('dashboard');
+    else setCurrentScreen('onboarding');
+    } else {
+    setAuthError('Kredensial tidak valid. Silakan periksa email dan password Anda.');
+    }
+    }
+    setIsLoading(false);
+    }, 800);
+    };
+
+    const handleRegister = async (email, password) => {
+    setAuthError('');
+    if (password.length < 6) { setAuthError('Password harus minimal 6 karakter.'); return; } setIsLoading(true);
+        setTimeout(()=> {
+        setIsLoading(false);
+        setCurrentScreen('onboarding');
+        }, 800);
+        };
+
+        const handleGuestLogin = async () => {
+        setAuthError('');
+        setIsLoading(true);
+        setTimeout(() => {
+        setIsLoading(false);
+        setCurrentScreen('onboarding');
+        }, 600);
+        };
+
+        const handleLogout = async () => {
+        setCurrentScreen('auth');
+        };
+
+        const handleResetProfile = async () => {
+        if (!user) return;
+        try {
+        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+        await deleteDoc(profileRef);
+        setCurrentScreen('auth');
+        } catch(error) {
+        console.error("Error resetting profile:", error);
+        }
+        };
+
+        const saveProfile = async (name) => {
+        if (!user || !name.trim()) return;
+        try {
+        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+        await setDoc(profileRef, {
+        name: name,
+        createdAt: new Date().toISOString()
+        });
+        setCurrentScreen('dashboard');
+        } catch (error) {
+        console.error("Error saving profile:", error);
+        }
+        };
+
+        const saveTask = async (taskData) => {
+        if (!user) return;
+        try {
+        const tasksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'tasks');
+        if (editingTask) {
+        const taskDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id);
+        await updateDoc(taskDoc, { ...taskData, updatedAt: new Date().toISOString() });
+        } else {
+        await addDoc(tasksRef, {
+        ...taskData,
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+        });
+        }
+        setIsTaskModalOpen(false);
+        setEditingTask(null);
+        } catch (error) {
+        console.error("Error saving task:", error);
+        }
+        };
+
+        const toggleTaskStatus = async (taskId, currentStatus) => {
+        if (!user) return;
+        try {
+        const taskDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', taskId);
+        await updateDoc(taskDoc, { isCompleted: !currentStatus });
+        } catch (error) {
+        console.error("Error updating task:", error);
+        }
+        };
+
+        const deleteTask = async (taskId) => {
+        if (!user) return;
+        try {
+        const taskDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', taskId);
+        await deleteDoc(taskDoc);
+        } catch (error) {
+        console.error("Error deleting task:", error);
+        }
+        };
+
+        const handleOpenTaskModal = (task = null) => {
+        setEditingTask(task);
+        setIsTaskModalOpen(true);
+        };
+
+        return (
+        <div className="w-full min-h-screen bg-black flex justify-center font-sans selection:bg-amber-500/30">
+            <div
+                className="w-full max-w-[400px] h-[100dvh] bg-slate-950 relative overflow-hidden shadow-2xl sm:border-x border-slate-800 flex flex-col">
+
+                {isLoading ?
+                <LoadingScreen /> : (
+                <>
+                    {currentScreen === 'auth' &&
+                    <AuthScreen onLogin={handleLogin} onRegister={handleRegister} error={authError}
+                        onGuestLogin={handleGuestLogin} />}
+                    {currentScreen === 'onboarding' &&
+                    <OnboardingScreen onSave={saveProfile} />}
+                    {currentScreen === 'dashboard' && (
+                    <DashboardScreen profile={profile} tasks={tasks} stats={stats} onSelectHub={(hub)=> {
+                        setSelectedHub(hub); setCurrentScreen('hub'); }}
+                        />
+                        )}
+                        {currentScreen === 'hub' && (
+                        <HubScreen hub={selectedHub} tasks={tasks} onBack={()=> setCurrentScreen('dashboard')}
+                            onToggleTask={toggleTaskStatus}
+                            onDeleteTask={deleteTask}
+                            onEditTask={handleOpenTaskModal}
+                            onOpenTaskModal={() => handleOpenTaskModal()}
+                            />
+                            )}
+                            {currentScreen === 'profile' && (
+                            <ProfileScreen profile={profile} user={user} stats={stats} onLogout={handleLogout}
+                                onResetProfile={handleResetProfile} />
+                            )}
+
+                            {currentScreen !== 'onboarding' && currentScreen !== 'auth' && (
+                            <div
+                                className="absolute bottom-0 w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 flex justify-around items-center p-4 pb-safe z-40">
+                                <button onClick={()=> setCurrentScreen('dashboard')}
+                                    className={`flex flex-col items-center gap-1 transition-colors ${['dashboard',
+                                    'hub'].includes(currentScreen) ? 'text-amber-500' : 'text-slate-500
+                                    hover:text-slate-300'}`}
+                                    >
+                                    <LayoutDashboard size={24} />
+                                    <span className="text-[10px] font-medium">Dashboard</span>
+                                </button>
+
+                                <div className="relative -top-6">
+                                    <button onClick={()=> handleOpenTaskModal()}
+                                        className="w-14 h-14 bg-white text-slate-900 rounded-full flex items-center
+                                        justify-center shadow-lg shadow-white/10 active:scale-90 transition-transform
+                                        border-4 border-slate-950"
+                                        >
+                                        <Plus size={28} />
+                                    </button>
+                                </div>
+
+                                <button onClick={()=> setCurrentScreen('profile')}
+                                    className={`flex flex-col items-center gap-1 transition-colors ${currentScreen ===
+                                    'profile' ? 'text-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                    <User size={24} />
+                                    <span className="text-[10px] font-medium">Profil</span>
+                                </button>
+                            </div>
+                            )}
+
+                            <TaskModal isOpen={isTaskModalOpen} onClose={()=> setIsTaskModalOpen(false)}
+                                editingTask={editingTask}
+                                selectedHubId={selectedHub?.id}
+                                onSaveTask={saveTask}
+                                />
+                </>
+                )}
+            </div>
+
+            <style dangerouslySetInnerHTML={{__html: ` .hide-scrollbar::-webkit-scrollbar { display: none; }
+                .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .pb-safe { padding-bottom:
+                env(safe-area-inset-bottom, 1rem); } `}} />
+        </div>
+        );
+        }
