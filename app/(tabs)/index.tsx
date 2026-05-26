@@ -85,31 +85,51 @@ export default function App() {
         screenSlideAnim.setValue(0);
       } else if (displayScreenKey === 'auth' && activeScreenKey === 'dashboard') {
         // Fast, premium fade-and-lift transition from Auth to Dashboard
-        Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: Platform.OS !== 'web' }).start(() => {
-          setDisplayScreen(currentScreen);
-          setDisplayHub(selectedHub);
-          setDisplayScreenKey(activeScreenKey);
-          screenSlideAnim.setValue(-5); // Very subtle lift
-          Animated.parallel([
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
-            Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: Platform.OS !== 'web' })
-          ]).start();
-        });
+        if (Platform.OS !== 'web') {
+          Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+            setDisplayScreen(currentScreen);
+            setDisplayHub(selectedHub);
+            setDisplayScreenKey(activeScreenKey);
+            screenSlideAnim.setValue(-5); // Very subtle lift
+            Animated.parallel([
+              Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+              Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: true })
+            ]).start();
+          });
+        } else {
+          // Simple Web Fade
+          Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: false }).start(() => {
+            setDisplayScreen(currentScreen);
+            setDisplayHub(selectedHub);
+            setDisplayScreenKey(activeScreenKey);
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+          });
+        }
       } else {
         // Standard interactive transition for hubs and screens
-        Animated.parallel([
-          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
-          Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: Platform.OS !== 'web' })
-        ]).start(() => {
-          setDisplayScreen(currentScreen);
-          setDisplayHub(selectedHub);
-          setDisplayScreenKey(activeScreenKey);
-          screenSlideAnim.setValue(-10);
+        if (Platform.OS !== 'web') {
           Animated.parallel([
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
-            Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: Platform.OS !== 'web' })
-          ]).start();
-        });
+            Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+            Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: true })
+          ]).start(() => {
+            setDisplayScreen(currentScreen);
+            setDisplayHub(selectedHub);
+            setDisplayScreenKey(activeScreenKey);
+            screenSlideAnim.setValue(-10);
+            Animated.parallel([
+              Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+              Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: true })
+            ]).start();
+          });
+        } else {
+          // Simple Web Fade
+          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: false }).start(() => {
+            setDisplayScreen(currentScreen);
+            setDisplayHub(selectedHub);
+            setDisplayScreenKey(activeScreenKey);
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: false }).start();
+          });
+        }
       }
     }
   }, [activeScreenKey, currentScreen, selectedHub, isLoggingOut]);
@@ -472,7 +492,7 @@ export default function App() {
         )}
 
         <View style={{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }}>
-          <Animated.View style={{ flex: 1, opacity: screenFadeAnim, transform: [{ translateY: screenSlideAnim }] }}>
+          <Animated.View style={{ flex: 1, opacity: screenFadeAnim, transform: Platform.OS === 'web' ? [] : [{ translateY: screenSlideAnim }] }}>
             {renderScreen()}
           </Animated.View>
         </View>
