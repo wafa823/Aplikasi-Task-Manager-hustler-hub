@@ -8,10 +8,12 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '@/lib/constants';
-import { LinearGradient } from 'expo-linear-gradient';
+import OnboardingLoadingScreen from '@/components/OnboardingLoadingScreen';
 
 interface AuthScreenProps {
   onLogin: (email: string, password: string) => void;
@@ -24,107 +26,234 @@ export default function AuthScreen({ onLogin, onRegister, onGuestLogin, error }:
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 1024;
+
+  // --- ANIMATIONS ---
+  const floatAnim1 = React.useRef(new Animated.Value(0)).current;
+  const floatAnim2 = React.useRef(new Animated.Value(0)).current;
+  
+  // Transition animation for Login/Register toggle
+  const formFadeAnim = React.useRef(new Animated.Value(1)).current;
+  const formTranslateY = React.useRef(new Animated.Value(0)).current;
+
+  const toggleMode = () => {
+    // Fade out and slide down slightly
+    Animated.parallel([
+      Animated.timing(formFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(formTranslateY, { toValue: 10, duration: 150, useNativeDriver: true })
+    ]).start(() => {
+      // Swap state while invisible
+      setIsLogin(!isLogin);
+      // Fade in and slide up
+      Animated.parallel([
+        Animated.timing(formFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.timing(formTranslateY, { toValue: 0, duration: 250, useNativeDriver: true })
+      ]).start();
+    });
+  };
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim1, { toValue: 1, duration: 10000, useNativeDriver: true }),
+        Animated.timing(floatAnim1, { toValue: 0, duration: 10000, useNativeDriver: true })
+      ])
+    ).start();
+    
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim2, { toValue: 1, duration: 12000, useNativeDriver: true }),
+        Animated.timing(floatAnim2, { toValue: 0, duration: 12000, useNativeDriver: true })
+      ])
+    ).start();
+  }, [floatAnim1, floatAnim2]);
+
+  const translateY1 = floatAnim1.interpolate({ inputRange: [0, 1], outputRange: [-80, 80] });
+  const scale1 = floatAnim1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
+  
+  const translateY2 = floatAnim2.interpolate({ inputRange: [0, 1], outputRange: [80, -80] });
+  const scale2 = floatAnim2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
 
   const handleSubmit = () => {
     if (!email.trim() || !password.trim()) return;
-    if (isLogin) {
-      onLogin(email, password);
-    } else {
-      onRegister(email, password);
-    }
+    setIsLoading(true);
+    setTimeout(() => {
+      if (isLogin) {
+        onLogin(email, password);
+      } else {
+        onRegister(email, password);
+      }
+    }, 4200);
   };
+
+  // Inject Lusion-style Noise Grain for Web
+  React.useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const style = document.createElement('style');
+      style.innerHTML = `
+        .lusion-noise {
+          position: fixed;
+          top: 0; left: 0; width: 100vw; height: 100vh;
+          pointer-events: none;
+          z-index: 50;
+          opacity: 0.04;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+      `;
+      document.head.appendChild(style);
+      
+      const noiseDiv = document.createElement('div');
+      noiseDiv.className = 'lusion-noise';
+      document.body.appendChild(noiseDiv);
+
+      return () => {
+        document.head.removeChild(style);
+        if (document.body.contains(noiseDiv)) document.body.removeChild(noiseDiv);
+      };
+    }
+  }, []);
+
+  // Reset loading if there's an error (parent sets error prop)
+  React.useEffect(() => {
+    if (error) setIsLoading(false);
+  }, [error]);
+
+  if (isLoading) {
+    // Derive display name from email prefix (e.g. john.doe@gmail.com → John Doe)
+    const displayName = email
+      .split('@')[0]
+      .replace(/[._-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .slice(0, 24);
+    return <OnboardingLoadingScreen name={displayName} />;
+  }
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Editorial Vertical Typography for Desktop */}
+      {isDesktop && (
+        <View style={styles.editorialWrapper} pointerEvents="none">
+          <Text style={styles.editorialTextLeft}>HUSTLER'S</Text>
+          <Text style={styles.editorialTextRight}>WORKSPACE</Text>
+        </View>
+      )}
+
+      {/* Animated Background Orbs - Kept for subtle light, but much darker */}
+      <View style={StyleSheet.absoluteFill}>
+        <Animated.View style={[styles.glowOrb, { 
+          backgroundColor: 'rgba(245, 158, 11, 0.08)', // Very subtle amber
+          top: '-10%', right: '-15%', 
+          transform: [{ translateY: translateY1 }, { scale: scale1 }] 
+        }]} />
+        <Animated.View style={[styles.glowOrb, { 
+          backgroundColor: 'rgba(59, 130, 246, 0.08)', // Very subtle blue
+          bottom: '-10%', left: '-15%', 
+          transform: [{ translateY: translateY2 }, { scale: scale2 }] 
+        }]} />
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo */}
-        <View style={styles.logoWrapper}>
-          <LinearGradient
-            colors={[COLORS.amber, COLORS.purple]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoBox}
-          >
-            <Feather name="briefcase" size={32} color={COLORS.white} />
-          </LinearGradient>
-        </View>
-
-        <Text style={styles.title}>The Hustler's Hub</Text>
-        <Text style={styles.subtitle}>
-          {isLogin ? 'Selamat datang kembali!' : 'Mulai perjalananmu hari ini.'}
-        </Text>
-
-        {/* Error */}
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
+        <Animated.View style={[styles.formContainer, { opacity: formFadeAnim, transform: [{ translateY: formTranslateY }] }]}>
+          {/* Lusion-style Massive Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {isLogin ? 'Hustler\'s\nHub.' : 'Bergabung\nSekarang.'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {isLogin ? 'Masukkan kredensialmu untuk mengakses workspace.' : 'Buat akun untuk mulai mengorganisir hidupmu.'}
+            </Text>
           </View>
-        ) : null}
 
-        {/* Form */}
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>EMAIL</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="email@contoh.com"
-            placeholderTextColor={COLORS.textDim}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+          {/* Error Message */}
+          {error ? (
+            <View style={styles.errorBox}>
+              <Feather name="alert-circle" size={16} color={COLORS.red} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>PASSWORD</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={COLORS.textDim}
-            secureTextEntry
-          />
-        </View>
+          {/* Minimalist Line Inputs */}
+          <View style={styles.inputGroup}>
+            {/* Email Input */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>ALAMAT EMAIL</Text>
+              <View style={styles.inputBox}>
+                <TextInput
+                  style={[styles.input, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="kamu@contoh.com"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete={Platform.OS === 'web' ? 'off' : 'off'}
+                  textContentType="none"
+                  importantForAutofill="no"
+                />
+              </View>
+            </View>
+            {/* Password Input */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>KATA SANDI</Text>
+              <View style={styles.inputBox}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 40 }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  secureTextEntry={!showPassword}
+                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
+                  textContentType="none"
+                  importantForAutofill="no"
+                />
+                <TouchableOpacity 
+                  style={styles.eyeIcon} 
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                >
+                  <Feather name={showPassword ? 'eye' : 'eye-off'} size={18} color="rgba(255,255,255,0.4)" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} activeOpacity={0.8}>
-          <Text style={styles.primaryButtonText}>
-            {isLogin ? 'Masuk' : 'Daftar Sekarang'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>Atau</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Guest Login */}
-        <TouchableOpacity style={styles.guestButton} onPress={onGuestLogin} activeOpacity={0.8}>
-          <Feather name="zap" size={16} color={COLORS.amber} />
-          <Text style={styles.guestButtonText}>Masuk Tanpa Akun (Mode Demo)</Text>
-        </TouchableOpacity>
-
-        {/* Switch Auth Mode */}
-        <View style={styles.switchRow}>
-          <Text style={styles.switchText}>
-            {isLogin ? 'Belum punya akun? ' : 'Sudah punya akun? '}
-          </Text>
-          <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
-            <Text style={styles.switchLink}>
-              {isLogin ? 'Daftar di sini' : 'Masuk di sini'}
+          {/* Primary Action */}
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} activeOpacity={0.8}>
+            <Text style={styles.primaryButtonText}>
+              {isLogin ? 'Masuk' : 'Daftar Sekarang'}
             </Text>
           </TouchableOpacity>
-        </View>
+
+          <TouchableOpacity style={styles.switchModeButton} onPress={toggleMode} activeOpacity={0.6}>
+            <Text style={styles.switchModeText}>
+              {isLogin ? 'Belum punya akun? Daftar di sini' : 'Sudah punya akun? Masuk'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>atau</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Guest Action */}
+          <TouchableOpacity style={styles.guestButton} onPress={onGuestLogin} activeOpacity={0.6}>
+            <Text style={styles.guestButtonText}>Lanjut sebagai Tamu</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -133,94 +262,152 @@ export default function AuthScreen({ onLogin, onRegister, onGuestLogin, error }:
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+    backgroundColor: COLORS.bg, // Sync with dashboard background
+    overflow: 'hidden',
+  },
+  editorialWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 0,
+  },
+  editorialTextLeft: {
+    color: 'rgba(255, 255, 255, 0.02)',
+    fontSize: 140,
+    fontWeight: '900',
+    letterSpacing: 8,
+    transform: [{ rotate: '-90deg' }, { translateY: -40 }],
+    width: 800, // Fixed width to allow rotation without layout breaking
+    textAlign: 'center',
+  },
+  editorialTextRight: {
+    color: 'rgba(255, 255, 255, 0.02)',
+    fontSize: 140,
+    fontWeight: '900',
+    letterSpacing: 8,
+    transform: [{ rotate: '90deg' }, { translateY: -40 }],
+    width: 800,
+    textAlign: 'center',
+  },
+  glowOrb: {
+    position: 'absolute',
+    width: 600,
+    height: 600,
+    borderRadius: 300,
+    ...Platform.select({
+      web: { filter: 'blur(120px)' as any },
+      default: { opacity: 0.3 },
+    })
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 40,
+    padding: 32,
   },
-  logoWrapper: {
-    alignItems: 'center',
-    marginBottom: 16,
+  formContainer: {
+    width: '100%',
+    maxWidth: 480, // Slightly wider for giant text
+    alignSelf: 'center',
   },
-  logoBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '-6deg' }],
-    shadowColor: COLORS.amber,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  header: {
+    marginBottom: 40,
   },
   title: {
     color: COLORS.white,
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.5,
+    fontSize: 44, // Slightly smaller
+    fontWeight: '900',
+    marginBottom: 12,
+    letterSpacing: -1.5,
+    lineHeight: 44,
   },
   subtitle: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 24,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
+    maxWidth: 300,
   },
   errorBox: {
-    backgroundColor: COLORS.redLight,
-    borderWidth: 1,
-    borderColor: COLORS.redBorder,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: 16,
+    marginBottom: 32,
+    borderLeftWidth: 3,
+    borderColor: COLORS.red,
+    gap: 8,
   },
   errorText: {
     color: COLORS.red,
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 13,
+    flex: 1,
   },
-  formGroup: {
-    marginBottom: 16,
+  inputGroup: {
+    marginBottom: 32,
+    gap: 20, // Add gap between email and password
   },
-  label: {
-    color: COLORS.textMuted,
-    fontSize: 10,
+  inputWrapper: {
+    width: '100%',
+  },
+  inputLabel: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-    marginLeft: 4,
+    letterSpacing: 2,
+    marginBottom: 8,
+    marginLeft: 4, // Align slightly inward to match bubble
+  },
+  inputBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    height: 52,
+    position: 'relative',
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 0,
+    height: '100%',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    zIndex: 2,
   },
   input: {
-    backgroundColor: COLORS.bgCard,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 12,
-    padding: 14,
+    flex: 1,
+    height: '100%',
     color: COLORS.white,
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '500',
+    paddingHorizontal: 16,
   },
   primaryButton: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    paddingVertical: 14,
+    width: '100%',
+    height: 50,
+    backgroundColor: COLORS.amber,
+    borderRadius: 6, // Softer edges are more pleasing
     alignItems: 'center',
-    marginTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'center',
+    position: 'relative',
   },
   primaryButtonText: {
-    color: COLORS.bg,
-    fontWeight: '700',
-    fontSize: 14,
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  switchModeButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  switchModeText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    fontWeight: '500',
   },
   divider: {
     flexDirection: 'row',
@@ -230,41 +417,29 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: COLORS.borderLight,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   dividerText: {
-    color: COLORS.textDim,
-    fontSize: 12,
-    marginHorizontal: 16,
+    color: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 16,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   guestButton: {
-    backgroundColor: COLORS.amberLight,
+    width: '100%',
+    height: 50,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    position: 'relative',
   },
   guestButtonText: {
-    color: COLORS.amber,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  switchText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-  },
-  switchLink: {
-    color: COLORS.amber,
-    fontSize: 12,
-    fontWeight: '700',
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

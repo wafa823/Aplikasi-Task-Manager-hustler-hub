@@ -1,3 +1,5 @@
+// components/OnboardingScreen.tsx
+
 import React, { useState } from 'react';
 import {
   View,
@@ -9,8 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '@/lib/constants';
+import OnboardingLoadingScreen from '@/components/OnboardingLoadingScreen';
 
 interface OnboardingScreenProps {
   onSave: (name: string) => void;
@@ -18,6 +20,23 @@ interface OnboardingScreenProps {
 
 export default function OnboardingScreen({ onSave }: OnboardingScreenProps) {
   const [name, setName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [submittedName, setSubmittedName] = useState('');
+
+  const handleSubmit = () => {
+    if (!name.trim()) return;
+    const trimmed = name.trim();
+    setSubmittedName(trimmed);
+    setIsLoading(true);
+    // Delay actual save so loading screen plays out (~4.2s)
+    setTimeout(() => {
+      onSave(trimmed);
+    }, 4200);
+  };
+
+  if (isLoading) {
+    return <OnboardingLoadingScreen name={submittedName} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -25,39 +44,41 @@ export default function OnboardingScreen({ onSave }: OnboardingScreenProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        {/* Logo */}
-        <View style={styles.logoWrapper}>
-          <LinearGradient
-            colors={[COLORS.amber, COLORS.purple]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoBox}
-          >
-            <Feather name="user" size={40} color={COLORS.white} />
-          </LinearGradient>
-        </View>
+        <View style={styles.formContainer}>
+          {/* Logo Mark */}
+          <View style={styles.logoRow}>
+            <View style={styles.logoMark}>
+              <Feather name="layers" size={20} color={COLORS.amber} />
+            </View>
+            <Text style={styles.appName}>Hustler's Hub</Text>
+          </View>
 
-        <Text style={styles.title}>Siapa namamu?</Text>
-        <Text style={styles.subtitle}>Satu tempat, untuk semua peranmu.</Text>
+          {/* Superlist-style Typography */}
+          <Text style={styles.title}>Siapa namamu?</Text>
+          <Text style={styles.subtitle}>Yuk, personalisasi workspace kamu.</Text>
 
-        <View style={styles.formArea}>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Masukkan panggilanmu..."
-            placeholderTextColor={COLORS.textDim}
-            autoFocus
-          />
+          {/* Form */}
+          <View style={styles.formArea}>
+            <TextInput
+              style={[styles.input, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+              value={name}
+              onChangeText={setName}
+              placeholder="Nama kamu"
+              placeholderTextColor={COLORS.textDim}
+              autoFocus
+              onSubmitEditing={handleSubmit}
+            />
 
-          <TouchableOpacity
-            style={[styles.button, !name.trim() && styles.buttonDisabled]}
-            onPress={() => onSave(name)}
-            disabled={!name.trim()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Mulai Perjalanan</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, !name.trim() && styles.buttonDisabled]}
+              onPress={handleSubmit}
+              disabled={!name.trim()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.primaryButtonText}>Mulai Sekarang</Text>
+              <Feather name="arrow-right" size={16} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -73,68 +94,76 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    padding: 24,
   },
-  logoWrapper: {
-    marginBottom: 24,
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
   },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  logoMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: COLORS.bgSurface,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '-6deg' }],
-    shadowColor: COLORS.amber,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+  appName: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   title: {
     color: COLORS.white,
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: -1,
     marginBottom: 8,
+    lineHeight: 40,
   },
   subtitle: {
     color: COLORS.textMuted,
-    fontSize: 14,
-    textAlign: 'center',
+    fontSize: 15,
+    lineHeight: 22,
   },
   formArea: {
     width: '100%',
-    marginTop: 32,
-    gap: 16,
+    marginTop: 24,
+    gap: 12,
   },
   input: {
     backgroundColor: COLORS.bgCard,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  button: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    paddingVertical: 16,
+  primaryButton: {
+    backgroundColor: COLORS.amber,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    gap: 8,
+    marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
-  buttonText: {
-    color: COLORS.bg,
+  primaryButtonText: {
+    color: COLORS.white,
+    fontSize: 15,
     fontWeight: '700',
-    fontSize: 16,
   },
 });
