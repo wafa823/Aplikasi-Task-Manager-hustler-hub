@@ -41,7 +41,7 @@ export default function ProfileScreen({
   profile, userId, userEmail, stats, onLogout, onResetProfile,
 }: ProfileScreenProps) {
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const isDesktop = Platform.OS === 'web' && width > 1024;
 
   const progressPct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
   const initials = profile?.name ? profile.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : 'HH';

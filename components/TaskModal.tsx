@@ -36,7 +36,7 @@ export default function TaskModal({
   isOpen, onClose, editingTask, selectedHubId, onSaveTask,
 }: TaskModalProps) {
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const isDesktop = Platform.OS === 'web' && width > 1024;
 
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');

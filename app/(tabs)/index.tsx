@@ -85,29 +85,29 @@ export default function App() {
         screenSlideAnim.setValue(0);
       } else if (displayScreenKey === 'auth' && activeScreenKey === 'dashboard') {
         // Fast, premium fade-and-lift transition from Auth to Dashboard
-        Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+        Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: Platform.OS !== 'web' }).start(() => {
           setDisplayScreen(currentScreen);
           setDisplayHub(selectedHub);
           setDisplayScreenKey(activeScreenKey);
           screenSlideAnim.setValue(-5); // Very subtle lift
           Animated.parallel([
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-            Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: true })
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
+            Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: Platform.OS !== 'web' })
           ]).start();
         });
       } else {
         // Standard interactive transition for hubs and screens
         Animated.parallel([
-          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-          Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: true })
+          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: Platform.OS !== 'web' })
         ]).start(() => {
           setDisplayScreen(currentScreen);
           setDisplayHub(selectedHub);
           setDisplayScreenKey(activeScreenKey);
           screenSlideAnim.setValue(-10);
           Animated.parallel([
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-            Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: true })
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
+            Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: Platform.OS !== 'web' })
           ]).start();
         });
       }
@@ -277,7 +277,7 @@ export default function App() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 350,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(async () => {
       try {
         await signOut(auth);
@@ -290,7 +290,7 @@ export default function App() {
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 350,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }).start(() => setIsLoggingOut(false));
       }
     });
@@ -313,7 +313,7 @@ export default function App() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500, // Slower fade out for dramatic effect
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(async () => {
       try {
         const profileRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'data');
@@ -326,7 +326,7 @@ export default function App() {
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 700, // Very slow and smooth reveal of the dashboard
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }).start(() => setIsLoggingOut(false));
       }
     });

@@ -175,7 +175,7 @@ export default function HubScreen({
   hub, tasks, onBack, onToggleTask, onDeleteTask, onEditTask, onOpenTaskModal, onDeleteHub,
 }: HubScreenProps) {
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const isDesktop = Platform.OS === 'web' && width > 1024;
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const isCustomHub = hub.id.startsWith('hub_');

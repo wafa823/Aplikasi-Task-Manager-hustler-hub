@@ -88,7 +88,7 @@ function ProgressRing({ completed, total, size = 56 }: { completed: number; tota
 
 export default function DashboardScreen({ profile, tasks, stats, allHubs, onSelectHub, onAddTask, onCreateHub, onEditTask }: DashboardScreenProps) {
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width > 768;
+  const isDesktop = Platform.OS === 'web' && width > 1024;
   const progressPct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
   const [activeTab, setActiveTab] = React.useState<TabType>('Hari Ini');
