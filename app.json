@@ -23,7 +23,7 @@
       "package": "com.hustlershub.app"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro"
     },

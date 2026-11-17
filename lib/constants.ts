@@ -60,6 +60,7 @@ export interface Hub {
   borderColor: string;
   accentColor: string;
   glowColor: string;
+  type?: 'workspace' | 'checklist';
 }
 
 export const HUBS: Hub[] = [

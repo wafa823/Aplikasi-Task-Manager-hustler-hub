@@ -10,6 +10,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +25,7 @@ interface HubScreenProps {
   onEditTask: (task: Task) => void;
   onOpenTaskModal: () => void;
   onDeleteHub?: (hubId: string) => void;
+  onQuickAddTask?: (title: string, categoryId: string) => void;
 }
 
 function TaskCard({
@@ -34,6 +36,7 @@ function TaskCard({
   onEdit,
   isSelected,
   onSelect,
+  isChecklist,
 }: {
   task: Task;
   hub: Hub;
@@ -42,6 +45,7 @@ function TaskCard({
   onEdit: () => void;
   isSelected?: boolean;
   onSelect?: () => void;
+  isChecklist?: boolean;
 }) {
   const deadlineInfo = getDeadlineStatus(task.deadline, task.isCompleted);
   const priority = task.priority as Priority;
@@ -56,7 +60,7 @@ function TaskCard({
       onPress={onSelect}
       activeOpacity={0.8}
     >
-      <View style={[styles.priorityStripe, { backgroundColor: PRIORITY_COLORS[priority] || COLORS.textDim }]} />
+      <View style={[styles.priorityStripe, { backgroundColor: isChecklist ? 'transparent' : (PRIORITY_COLORS[priority] || COLORS.textDim) }]} />
 
       <TouchableOpacity style={styles.checkButton} onPress={onToggle} activeOpacity={0.7}>
         <View style={[
@@ -77,27 +81,31 @@ function TaskCard({
         {task.notes ? (
           <Text style={styles.taskNotes} numberOfLines={1}>{task.notes}</Text>
         ) : null}
-        <View style={styles.taskMeta}>
-          <View style={[styles.deadlinePill, { borderColor: `${deadlineInfo.color}40` }]}>
-            <Feather name="calendar" size={10} color={deadlineInfo.color} />
-            <Text style={[styles.taskDeadline, { color: deadlineInfo.color }]}>
-              {deadlineInfo.text}
-            </Text>
-          </View>
-          {priority && (
-            <View style={[styles.priorityPill, { borderColor: `${PRIORITY_COLORS[priority]}40` }]}>
-              <Text style={[styles.priorityText, { color: PRIORITY_COLORS[priority] }]}>
-                {PRIORITY_LABELS[priority]}
+        {!isChecklist && (
+          <View style={styles.taskMeta}>
+            <View style={[styles.deadlinePill, { borderColor: `${deadlineInfo.color}40` }]}>
+              <Feather name="calendar" size={10} color={deadlineInfo.color} />
+              <Text style={[styles.taskDeadline, { color: deadlineInfo.color }]}>
+                {deadlineInfo.text}
               </Text>
             </View>
-          )}
-        </View>
+            {priority && (
+              <View style={[styles.priorityPill, { borderColor: `${PRIORITY_COLORS[priority]}40` }]}>
+                <Text style={[styles.priorityText, { color: PRIORITY_COLORS[priority] }]}>
+                  {PRIORITY_LABELS[priority]}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       <View style={styles.taskActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={onEdit} activeOpacity={0.7}>
-          <Feather name="edit-3" size={14} color={COLORS.textMuted} />
-        </TouchableOpacity>
+        {!isChecklist && (
+          <TouchableOpacity style={styles.actionButton} onPress={onEdit} activeOpacity={0.7}>
+            <Feather name="edit-3" size={14} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.actionButton} onPress={onDelete} activeOpacity={0.7}>
           <Feather name="trash-2" size={14} color={COLORS.red} />
         </TouchableOpacity>
@@ -172,27 +180,60 @@ function TaskDetail({ task, hub }: { task: Task; hub: Hub }) {
 }
 
 export default function HubScreen({
-  hub, tasks, onBack, onToggleTask, onDeleteTask, onEditTask, onOpenTaskModal, onDeleteHub,
+  hub, tasks, onBack, onToggleTask, onDeleteTask, onEditTask, onOpenTaskModal, onDeleteHub, onQuickAddTask,
 }: HubScreenProps) {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 1024;
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [quickTitle, setQuickTitle] = useState('');
 
   const isCustomHub = hub.id.startsWith('hub_');
+  const isChecklist = hub.type === 'checklist';
 
   const filteredTasks = tasks.filter((t) => t.category === hub.id);
   const pendingTasks = filteredTasks.filter((t) => !t.isCompleted);
   const completedTasks = filteredTasks.filter((t) => t.isCompleted);
 
+  const handleQuickAddSubmit = () => {
+    if (!quickTitle.trim() || !onQuickAddTask) return;
+    onQuickAddTask(quickTitle, hub.id);
+    setQuickTitle('');
+  };
+
   const renderTaskList = () => (
     <>
+      {isChecklist && onQuickAddTask && (
+        <View style={styles.quickAddContainer}>
+          <TextInput
+            style={[styles.quickAddInput, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+            placeholder="Tambah item baru ke checklist..."
+            placeholderTextColor={COLORS.textDim}
+            value={quickTitle}
+            onChangeText={setQuickTitle}
+            onSubmitEditing={handleQuickAddSubmit}
+          />
+          <TouchableOpacity
+            style={[styles.quickAddBtn, { backgroundColor: hub.color }, !quickTitle.trim() && { opacity: 0.5 }]}
+            onPress={handleQuickAddSubmit}
+            disabled={!quickTitle.trim()}
+            activeOpacity={0.8}
+          >
+            <Feather name="plus" size={16} color={COLORS.bg} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {filteredTasks.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={[styles.emptyIconWrap, { backgroundColor: hub.bgColor }]}>
             <Feather name={hub.iconName as any} size={36} color={hub.color} />
           </View>
-          <Text style={styles.emptyTitle}>Belum Ada Tugas</Text>
-          <Text style={styles.emptyText}>Ketuk tombol (+) untuk mulai menambah tugas di {hub.title}.</Text>
+          <Text style={styles.emptyTitle}>Belum Ada {isChecklist ? 'Item' : 'Tugas'}</Text>
+          <Text style={styles.emptyText}>
+            {isChecklist
+              ? 'Tulis item di atas lalu tekan (+) untuk mulai mengisi checklist.'
+              : `Ketuk tombol (+) untuk mulai menambah tugas di ${hub.title}.`}
+          </Text>
         </View>
       ) : (
         <>
@@ -209,6 +250,7 @@ export default function HubScreen({
                   onEdit={() => onEditTask(task)}
                   isSelected={isDesktop && selectedTask?.id === task.id}
                   onSelect={isDesktop ? () => setSelectedTask(task) : undefined}
+                  isChecklist={isChecklist}
                 />
               ))}
             </>
@@ -226,6 +268,7 @@ export default function HubScreen({
                   onEdit={() => onEditTask(task)}
                   isSelected={isDesktop && selectedTask?.id === task.id}
                   onSelect={isDesktop ? () => setSelectedTask(task) : undefined}
+                  isChecklist={isChecklist}
                 />
               ))}
             </>
@@ -247,7 +290,7 @@ export default function HubScreen({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.desktopHubTitle}>{hub.title}</Text>
-              <Text style={styles.desktopHubSubtitle}>{filteredTasks.length} tugas · {pendingTasks.length} aktif</Text>
+              <Text style={styles.desktopHubSubtitle}>{filteredTasks.length} {isChecklist ? 'item' : 'tugas'} · {pendingTasks.length} aktif</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {isCustomHub && onDeleteHub && (
@@ -255,10 +298,12 @@ export default function HubScreen({
                   <Feather name="trash-2" size={16} color={COLORS.red} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[styles.desktopAddBtn, { backgroundColor: hub.accentColor }]} onPress={onOpenTaskModal} activeOpacity={0.8}>
-                <Feather name="plus" size={16} color={COLORS.white} />
-                <Text style={styles.desktopAddBtnText}>Tambah</Text>
-              </TouchableOpacity>
+              {!isChecklist && (
+                <TouchableOpacity style={[styles.desktopAddBtn, { backgroundColor: hub.accentColor }]} onPress={onOpenTaskModal} activeOpacity={0.8}>
+                  <Feather name="plus" size={16} color={COLORS.white} />
+                  <Text style={styles.desktopAddBtnText}>Tambah</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -269,7 +314,12 @@ export default function HubScreen({
 
         {/* Right: Detail Panel */}
         <View style={styles.desktopRight}>
-          {selectedTask ? (
+          {isChecklist ? (
+            <View style={styles.emptyDetail}>
+              <Feather name="check-square" size={32} color={hub.color} style={{ opacity: 0.4 }} />
+              <Text style={styles.emptyDetailText}>Tampilan Checklist Sederhana</Text>
+            </View>
+          ) : selectedTask ? (
             <TaskDetail task={selectedTask} hub={hub} />
           ) : (
             <View style={styles.emptyDetail}>
@@ -315,13 +365,15 @@ export default function HubScreen({
         {renderTaskList()}
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: hub.accentColor }]}
-        onPress={onOpenTaskModal}
-        activeOpacity={0.8}
-      >
-        <Feather name="plus" size={28} color={COLORS.white} />
-      </TouchableOpacity>
+      {!isChecklist && (
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: hub.accentColor }]}
+          onPress={onOpenTaskModal}
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={28} color={COLORS.white} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -433,5 +485,32 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
+  },
+
+  // Quick Add
+  quickAddContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 16,
+    gap: 8,
+  },
+  quickAddInput: {
+    flex: 1,
+    color: COLORS.white,
+    fontSize: 14,
+    paddingVertical: 10,
+  },
+  quickAddBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

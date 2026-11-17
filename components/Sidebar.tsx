@@ -46,6 +46,9 @@ export default function Sidebar({
   const [isHubModalOpen, setIsHubModalOpen] = React.useState(false);
   const pendingTasks = tasks.filter((t) => !t.isCompleted).length;
 
+  const workspaces = React.useMemo(() => allHubs.filter(h => h.type !== 'checklist'), [allHubs]);
+  const checklists = React.useMemo(() => allHubs.filter(h => h.type === 'checklist'), [allHubs]);
+
   return (
     <View style={styles.sidebar}>
       {/* Glow top accent */}
@@ -111,7 +114,7 @@ export default function Sidebar({
         {/* Hub Section */}
         <Text style={[styles.navSectionLabel, { marginTop: 20 }]}>WORKSPACES</Text>
 
-        {allHubs.map((hub) => {
+        {workspaces.map((hub) => {
           const isActive = currentScreen === 'hub' && selectedHub?.id === hub.id;
           const hubTaskCount = tasks.filter(
             (t) => t.category === hub.id && !t.isCompleted
@@ -160,6 +163,62 @@ export default function Sidebar({
             </TouchableOpacity>
           );
         })}
+
+        {/* Checklist Section */}
+        {checklists.length > 0 && (
+          <>
+            <Text style={[styles.navSectionLabel, { marginTop: 20 }]}>CHECKLIST</Text>
+            {checklists.map((hub) => {
+              const isActive = currentScreen === 'hub' && selectedHub?.id === hub.id;
+              const hubTaskCount = tasks.filter(
+                (t) => t.category === hub.id && !t.isCompleted
+              ).length;
+
+              return (
+                <TouchableOpacity
+                  key={hub.id}
+                  style={[styles.navItem, isActive && styles.navItemActive]}
+                  onPress={() => onSelectHub(hub)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.navIconWrap,
+                      isActive && { backgroundColor: hub.glowColor },
+                    ]}
+                  >
+                    <Feather
+                      name={hub.iconName as any}
+                      size={16}
+                      color={isActive ? hub.color : COLORS.textDim}
+                    />
+                  </View>
+                  <View style={styles.navTextWrap}>
+                    <Text
+                      style={[
+                        styles.navLabel,
+                        isActive && { color: hub.color },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {hub.title}
+                    </Text>
+                    <Text style={styles.navSubLabel} numberOfLines={1}>
+                      {hub.subtitle}
+                    </Text>
+                  </View>
+                  {hubTaskCount > 0 && (
+                    <View style={[styles.navBadge, { backgroundColor: hub.bgColor, borderColor: hub.borderColor }]}>
+                      <Text style={[styles.navBadgeText, { color: hub.color }]}>
+                        {hubTaskCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
 
         {/* Quick Add Task */}
         <TouchableOpacity

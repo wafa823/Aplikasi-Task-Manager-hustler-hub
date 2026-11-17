@@ -59,6 +59,8 @@ interface DashboardScreenProps {
   onAddTask: () => void;
   onCreateHub: (hub: Hub) => void;
   onEditTask?: (task: Task) => void;
+  onToggleTask?: (taskId: string, currentStatus: boolean) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 function ProgressRing({ completed, total, size = 56 }: { completed: number; total: number; size?: number }) {
@@ -86,121 +88,49 @@ function ProgressRing({ completed, total, size = 56 }: { completed: number; tota
   );
 }
 
-export default function DashboardScreen({ profile, tasks, stats, allHubs, onSelectHub, onAddTask, onCreateHub, onEditTask }: DashboardScreenProps) {
+export default function DashboardScreen({
+  profile,
+  tasks,
+  stats,
+  allHubs,
+  onSelectHub,
+  onAddTask,
+  onCreateHub,
+  onEditTask,
+  onToggleTask,
+  onDeleteTask,
+}: DashboardScreenProps) {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 1024;
   const progressPct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
+  const workspaces = useMemo(() => allHubs.filter(h => h.type !== 'checklist'), [allHubs]);
+  const checklists = useMemo(() => allHubs.filter(h => h.type === 'checklist'), [allHubs]);
+
+  // --- SPLIT STATS ---
+  const workspaceIds = useMemo(() => new Set(workspaces.map(h => h.id)), [workspaces]);
+  const checklistIds = useMemo(() => new Set(checklists.map(h => h.id)), [checklists]);
+
+  const wsStats = useMemo(() => {
+    const wsTasks = tasks.filter(t => workspaceIds.has(t.category));
+    const completed = wsTasks.filter(t => t.isCompleted).length;
+    return { completed, pending: wsTasks.length - completed, total: wsTasks.length };
+  }, [tasks, workspaceIds]);
+
+  const clStats = useMemo(() => {
+    const clTasks = tasks.filter(t => checklistIds.has(t.category));
+    const completed = clTasks.filter(t => t.isCompleted).length;
+    return { completed, pending: clTasks.length - completed, total: clTasks.length };
+  }, [tasks, checklistIds]);
+
+  const wsPct = wsStats.total > 0 ? Math.round((wsStats.completed / wsStats.total) * 100) : 0;
+  const clPct = clStats.total > 0 ? Math.round((clStats.completed / clStats.total) * 100) : 0;
+
   const [activeTab, setActiveTab] = React.useState<TabType>('Hari Ini');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isHubModalOpen, setIsHubModalOpen] = React.useState(false);
-  const [isBellOpen, setIsBellOpen] = React.useState(false);
-  const bellAnim = useRef(new Animated.Value(0)).current;
-
-  // --- NOTIFICATIONS ---
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-
-  const notifications = useMemo(() => {
-    const notifs: { id: string; type: 'overdue' | 'today' | 'tomorrow'; task: Task }[] = [];
-    tasks.forEach((t) => {
-      if (t.isCompleted) return;
-      const d = new Date(t.deadline);
-      if (d < now) notifs.push({ id: t.id, type: 'overdue', task: t });
-      else if (d >= todayStart && d < tomorrowStart) notifs.push({ id: t.id, type: 'today', task: t });
-    });
-    return notifs.slice(0, 10);
-  }, [tasks]);
-
-  const toggleBell = () => {
-    const toValue = isBellOpen ? 0 : 1;
-    setIsBellOpen(!isBellOpen);
-    Animated.spring(bellAnim, {
-      toValue,
-      useNativeDriver: true,
-      tension: 80,
-      friction: 12,
-    }).start();
-  };
-
-  const bellDropdownStyle = {
-    opacity: bellAnim,
-    transform: [
-      { scale: bellAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
-      { translateY: bellAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) },
-    ],
-    pointerEvents: isBellOpen ? 'auto' : 'none',
-  };
-
-  const renderBellButton = () => (
-    <View style={styles.bellWrapper}>
-      <AnimatedButton style={styles.bellBtn} onPress={toggleBell} activeOpacity={0.8}>
-        <Feather name="bell" size={18} color={notifications.length > 0 ? COLORS.amber : COLORS.textMuted} />
-        {notifications.length > 0 && (
-          <View style={styles.bellBadge}>
-            <Text style={styles.bellBadgeText}>
-              {notifications.length > 9 ? '9+' : notifications.length}
-            </Text>
-          </View>
-        )}
-      </AnimatedButton>
-
-      {/* Dropdown Panel */}
-      {isBellOpen && (
-        <Animated.View style={[styles.bellDropdown, bellDropdownStyle as any]}>
-          {/* Header */}
-          <View style={styles.bellDropdownHeader}>
-            <Text style={styles.bellDropdownTitle}>Notifikasi</Text>
-            <AnimatedButton onPress={toggleBell}>
-              <Feather name="x" size={14} color={COLORS.textDim} />
-            </AnimatedButton>
-          </View>
-
-          {notifications.length === 0 ? (
-            <View style={styles.bellEmpty}>
-              <Feather name="check-circle" size={28} color={COLORS.green} />
-              <Text style={styles.bellEmptyText}>Semua tugas aman! 🎉</Text>
-            </View>
-          ) : (
-            <ScrollView style={styles.bellList} showsVerticalScrollIndicator={false}>
-              {notifications.map((n) => {
-                const hub = allHubs.find((h) => h.id === n.task.category);
-                const isOverdue = n.type === 'overdue';
-                const accentColor = isOverdue ? COLORS.red : COLORS.amber;
-                return (
-                  <AnimatedButton
-                    key={n.id}
-                    style={[styles.bellItem, { borderLeftColor: accentColor }]}
-                    onPress={() => {
-                      toggleBell();
-                      if (hub) onSelectHub(hub);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.bellItemIcon, { backgroundColor: isOverdue ? COLORS.redLight : COLORS.amberLight }]}>
-                      <Feather
-                        name={isOverdue ? 'alert-circle' : 'clock'}
-                        size={13}
-                        color={accentColor}
-                      />
-                    </View>
-                    <View style={styles.bellItemText}>
-                      <Text style={styles.bellItemTitle} numberOfLines={1}>{n.task.title}</Text>
-                      <Text style={[styles.bellItemSub, { color: accentColor }]}>
-                        {isOverdue ? '⚠️ Terlambat' : '⏰ Hari ini'}
-                        {hub ? ` · ${hub.title}` : ''}
-                      </Text>
-                    </View>
-                  </AnimatedButton>
-                );
-              })}
-            </ScrollView>
-          )}
-        </Animated.View>
-      )}
-    </View>
-  );
+  // --- NOTIFICATIONS (TEMPORARILY DISABLED) ---
+  const renderBellButton = () => null;
 
   const filteredTasks = useMemo(() => {
     if (searchQuery.trim().length > 0) {
@@ -267,24 +197,65 @@ export default function DashboardScreen({ profile, tasks, stats, allHubs, onSele
         ) : (
           <View style={styles.urgentList}>
             {filteredTasks.map((task) => {
-              const hub = HUBS.find((h) => h.id === task.category);
+              const hub = allHubs.find((h) => h.id === task.category);
               return (
-                <AnimatedButton
+                <View
                   key={task.id}
                   style={[styles.urgentItem, { borderLeftColor: hub?.color || COLORS.amber }]}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    if (hub) onSelectHub(hub);
-                  }}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.urgentTitle, task.isCompleted && styles.completedText]}>{task.title}</Text>
-                    <Text style={styles.urgentMeta}>
-                      {hub?.title} · {new Date(task.deadline).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':')} WIB
+                  {/* Left: Complete/Pending Checkbox */}
+                  {onToggleTask && (
+                    <TouchableOpacity
+                      onPress={() => onToggleTask(task.id, task.isCompleted)}
+                      style={styles.taskCheckbox}
+                      activeOpacity={0.7}
+                    >
+                      <Feather
+                        name={task.isCompleted ? 'check-circle' : 'circle'}
+                        size={18}
+                        color={task.isCompleted ? COLORS.green : COLORS.textDim}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Middle: Title, Category, Deadline */}
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingHorizontal: 8 }}
+                    onPress={() => {
+                      if (hub) onSelectHub(hub);
+                    }}
+                    activeOpacity={hub ? 0.7 : 1}
+                  >
+                    <Text style={[styles.urgentTitle, task.isCompleted && styles.completedText]} numberOfLines={1}>
+                      {task.title}
                     </Text>
+                    <Text style={styles.urgentMeta} numberOfLines={1}>
+                      {hub ? hub.title : 'Kategori tidak dikenal'} · {new Date(task.deadline).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':')} WIB
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Right: Actions (Edit & Delete) */}
+                  <View style={styles.taskActions}>
+                    {onEditTask && (
+                      <TouchableOpacity
+                        onPress={() => onEditTask(task)}
+                        style={styles.taskActionBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="edit-2" size={14} color={COLORS.textDim} />
+                      </TouchableOpacity>
+                    )}
+                    {onDeleteTask && (
+                      <TouchableOpacity
+                        onPress={() => onDeleteTask(task.id)}
+                        style={styles.taskActionBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="trash-2" size={14} color={COLORS.red} />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <Feather name="chevron-right" size={20} color={COLORS.textDim} />
-                </AnimatedButton>
+                </View>
               );
             })}
           </View>
@@ -333,57 +304,81 @@ export default function DashboardScreen({ profile, tasks, stats, allHubs, onSele
           </View>
         </View>
 
-        {/* Bento Grid Row 1 */}
+        {/* Bento Grid Row 1 — Split Stats */}
         <View style={styles.bentoRow}>
-          {/* Big Progress Card */}
-          <View style={[styles.bentoCard, styles.bentoLarge]}>
+          {/* Workspace Stats Card */}
+          <View style={[styles.bentoCard, { flex: 1, minHeight: 120, justifyContent: 'space-between', overflow: 'hidden' }]}>
             <LinearGradient
-              colors={['rgba(245,158,11,0.12)', 'rgba(168,85,247,0.08)']}
+              colors={['rgba(59,130,246,0.10)', 'rgba(168,85,247,0.06)']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={styles.bentoCardLabel}>PROGRES HARI INI</Text>
-            <View style={styles.progressRow}>
-              <View>
-                <Text style={styles.bigNumber}>{progressPct}%</Text>
-                <Text style={styles.progressSubtext}>
-                  {stats.completed} dari {stats.total} tugas selesai
-                </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={[styles.statIconWrap, { backgroundColor: COLORS.blueLight, width: 24, height: 24, borderRadius: 6 }]}>
+                  <Feather name="layers" size={12} color={COLORS.blue} />
+                </View>
+                <Text style={styles.bentoCardLabel}>WORKSPACES</Text>
               </View>
-              <ProgressRing completed={stats.completed} total={stats.total} size={56} />
+              <ProgressRing completed={wsStats.completed} total={wsStats.total} size={38} />
             </View>
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${progressPct}%` as any }]} />
+            <Text style={[styles.bigNumber, { fontSize: 28, color: COLORS.blue }]}>{wsPct}%</Text>
+            <Text style={styles.progressSubtext}>{wsStats.completed} dari {wsStats.total} selesai</Text>
+            <View style={[styles.progressBarBg, { marginTop: 10 }]}>
+              <View style={[styles.progressBarFill, { width: `${wsPct}%` as any, backgroundColor: COLORS.blue }]} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Feather name="clock" size={10} color={COLORS.blue} />
+                <Text style={{ color: COLORS.textDim, fontSize: 10 }}>{wsStats.pending} pending</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Feather name="check" size={10} color={COLORS.green} />
+                <Text style={{ color: COLORS.textDim, fontSize: 10 }}>{wsStats.completed} selesai</Text>
+              </View>
             </View>
           </View>
 
-          {/* Stats Cards */}
-          <View style={styles.bentoSmallGroup}>
-            <View style={[styles.bentoCard, styles.bentoSmall]}>
-              <View style={styles.statNumberRow}>
-                <View style={[styles.statIconWrap, { backgroundColor: COLORS.blueLight }]}>
-                  <Feather name="clock" size={18} color={COLORS.blue} />
+          {/* Checklist Stats Card */}
+          <View style={[styles.bentoCard, { flex: 1, minHeight: 120, justifyContent: 'space-between', overflow: 'hidden' }]}>
+            <LinearGradient
+              colors={['rgba(34,197,94,0.10)', 'rgba(245,158,11,0.06)']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={[styles.statIconWrap, { backgroundColor: COLORS.greenLight, width: 24, height: 24, borderRadius: 6 }]}>
+                  <Feather name="check-square" size={12} color={COLORS.green} />
                 </View>
-                <Text style={styles.statNumber}>{stats.pending}</Text>
+                <Text style={styles.bentoCardLabel}>CHECKLIST</Text>
               </View>
-              <Text style={styles.statLabelBottom}>Tugas Pending</Text>
+              <ProgressRing completed={clStats.completed} total={clStats.total} size={38} />
             </View>
-            <View style={[styles.bentoCard, styles.bentoSmall]}>
-              <View style={styles.statNumberRow}>
-                <View style={[styles.statIconWrap, { backgroundColor: COLORS.greenLight }]}>
-                  <Feather name="check-circle" size={18} color={COLORS.green} />
-                </View>
-                <Text style={styles.statNumber}>{stats.completed}</Text>
+            <Text style={[styles.bigNumber, { fontSize: 28, color: COLORS.green }]}>{clPct}%</Text>
+            <Text style={styles.progressSubtext}>
+              {checklists.length === 0 ? 'Belum ada checklist' : `${clStats.completed} dari ${clStats.total} selesai`}
+            </Text>
+            <View style={[styles.progressBarBg, { marginTop: 10 }]}>
+              <View style={[styles.progressBarFill, { width: `${clPct}%` as any, backgroundColor: COLORS.green }]} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Feather name="clock" size={10} color={COLORS.amber} />
+                <Text style={{ color: COLORS.textDim, fontSize: 10 }}>{clStats.pending} tersisa</Text>
               </View>
-              <Text style={styles.statLabelBottom}>Tugas Selesai</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Feather name="check" size={10} color={COLORS.green} />
+                <Text style={{ color: COLORS.textDim, fontSize: 10 }}>{clStats.completed} selesai</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Hub Cards */}
+        {/* Workspaces */}
         <Text style={styles.sectionTitle}>Workspaces</Text>
         <View style={styles.hubGrid}>
-          {allHubs.map((hub) => {
+          {workspaces.map((hub) => {
             const active = tasks.filter((t) => t.category === hub.id && !t.isCompleted).length;
             const total = tasks.filter((t) => t.category === hub.id).length;
             const done = tasks.filter((t) => t.category === hub.id && t.isCompleted).length;
@@ -433,6 +428,63 @@ export default function DashboardScreen({ profile, tasks, stats, allHubs, onSele
           })}
         </View>
 
+        {/* Checklists (Daftar Saya) */}
+        {checklists.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Checklist</Text>
+            <View style={styles.hubGrid}>
+              {checklists.map((hub) => {
+                const active = tasks.filter((t) => t.category === hub.id && !t.isCompleted).length;
+                const total = tasks.filter((t) => t.category === hub.id).length;
+                const done = tasks.filter((t) => t.category === hub.id && t.isCompleted).length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+                return (
+                  <AnimatedButton
+                    key={hub.id}
+                    style={[styles.hubCard, { borderColor: hub.borderColor }]}
+                    onPress={() => onSelectHub(hub)}
+                    activeOpacity={0.7}
+                  >
+                    <LinearGradient
+                      colors={[hub.bgColor, 'transparent']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+
+                    <View style={styles.hubCardRow}>
+                      {/* Left: Icon and Title/Subtitle */}
+                      <View style={styles.hubCardLeft}>
+                        <View style={[styles.hubIconBox, { backgroundColor: hub.glowColor }]}>
+                          <Feather name={hub.iconName as any} size={18} color={hub.color} />
+                        </View>
+                        <View style={styles.hubCardText}>
+                          <Text style={styles.hubTitleFlat}>{hub.title}</Text>
+                          <Text style={styles.hubSubtitleFlat}>{hub.subtitle}</Text>
+                        </View>
+                      </View>
+
+                      {/* Right: Progress and Status Badge */}
+                      <View style={styles.hubCardRight}>
+                        <View style={styles.hubProgressSection}>
+                          <Text style={styles.hubProgressLabelFlat}>{pct}% selesai</Text>
+                          <View style={styles.hubProgressBarFlat}>
+                            <View style={[styles.hubProgressFill, { width: `${pct}%` as any, backgroundColor: hub.color }]} />
+                          </View>
+                        </View>
+
+                        <View style={[styles.hubBadgeFlat, { backgroundColor: hub.bgColor, borderColor: hub.borderColor }]}>
+                          <Text style={[styles.hubBadgeText, { color: hub.color }]}>{active} aktif</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </AnimatedButton>
+                );
+              })}
+            </View>
+          </>
+        )}
+
         {/* Smart Task List */}
         <View style={styles.listHeaderRow}>
           <View style={styles.titleCapsule}>
@@ -471,24 +523,64 @@ export default function DashboardScreen({ profile, tasks, stats, allHubs, onSele
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.mobileContentInner} showsVerticalScrollIndicator={false}>
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statPill, { borderColor: COLORS.blueBorder }]}>
-            <Text style={[styles.statPillNum, { color: COLORS.blue }]}>{stats.pending}</Text>
-            <Text style={styles.statPillLabel}>Pending</Text>
+        {/* Stats — Split Workspace vs Checklist */}
+        {/* Workspace Stats */}
+        <View style={[styles.splitStatCard, { borderColor: COLORS.blueBorder }]}>
+          <LinearGradient
+            colors={['rgba(59,130,246,0.08)', 'transparent']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.splitStatHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={[styles.splitStatIcon, { backgroundColor: COLORS.blueLight }]}>
+                <Feather name="layers" size={12} color={COLORS.blue} />
+              </View>
+              <Text style={[styles.splitStatTitle, { color: COLORS.blue }]}>Workspaces</Text>
+            </View>
+            <Text style={[styles.splitStatPct, { color: COLORS.blue }]}>{wsPct}%</Text>
           </View>
-          <View style={[styles.statPill, { borderColor: COLORS.greenBorder }]}>
-            <Text style={[styles.statPillNum, { color: COLORS.green }]}>{stats.completed}</Text>
-            <Text style={styles.statPillLabel}>Selesai</Text>
+          <View style={[styles.progressBarBg, { marginVertical: 6 }]}>
+            <View style={[styles.progressBarFill, { width: `${wsPct}%` as any, backgroundColor: COLORS.blue }]} />
           </View>
-          <View style={[styles.statPill, { borderColor: COLORS.amberBorder }]}>
-            <Text style={[styles.statPillNum, { color: COLORS.amber }]}>{progressPct}%</Text>
-            <Text style={styles.statPillLabel}>Progress</Text>
+          <View style={styles.splitStatRow}>
+            <Text style={styles.splitStatSub}><Text style={{ color: COLORS.blue, fontWeight: '700' }}>{wsStats.pending}</Text> pending</Text>
+            <Text style={styles.splitStatSub}><Text style={{ color: COLORS.green, fontWeight: '700' }}>{wsStats.completed}</Text> selesai</Text>
+            <Text style={styles.splitStatSub}><Text style={{ color: COLORS.textMuted, fontWeight: '700' }}>{wsStats.total}</Text> total</Text>
           </View>
         </View>
 
-        {/* Hub Cards */}
-        {allHubs.map((hub) => {
+        {/* Checklist Stats */}
+        {checklists.length > 0 && (
+          <View style={[styles.splitStatCard, { borderColor: COLORS.greenBorder }]}>
+            <LinearGradient
+              colors={['rgba(34,197,94,0.08)', 'transparent']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.splitStatHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={[styles.splitStatIcon, { backgroundColor: COLORS.greenLight }]}>
+                  <Feather name="check-square" size={12} color={COLORS.green} />
+                </View>
+                <Text style={[styles.splitStatTitle, { color: COLORS.green }]}>Checklist</Text>
+              </View>
+              <Text style={[styles.splitStatPct, { color: COLORS.green }]}>{clPct}%</Text>
+            </View>
+            <View style={[styles.progressBarBg, { marginVertical: 6 }]}>
+              <View style={[styles.progressBarFill, { width: `${clPct}%` as any, backgroundColor: COLORS.green }]} />
+            </View>
+            <View style={styles.splitStatRow}>
+              <Text style={styles.splitStatSub}><Text style={{ color: COLORS.amber, fontWeight: '700' }}>{clStats.pending}</Text> tersisa</Text>
+              <Text style={styles.splitStatSub}><Text style={{ color: COLORS.green, fontWeight: '700' }}>{clStats.completed}</Text> selesai</Text>
+              <Text style={styles.splitStatSub}><Text style={{ color: COLORS.textMuted, fontWeight: '700' }}>{clStats.total}</Text> total</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Workspaces (Mobile) */}
+        <Text style={styles.mobileSectionTitle}>Workspaces</Text>
+        {workspaces.map((hub) => {
           const activeTasks = tasks.filter((t) => t.category === hub.id && !t.isCompleted).length;
           return (
             <AnimatedButton
@@ -513,6 +605,38 @@ export default function DashboardScreen({ profile, tasks, stats, allHubs, onSele
             </AnimatedButton>
           );
         })}
+
+        {/* Checklists / Daftar Saya (Mobile) */}
+        {checklists.length > 0 && (
+          <>
+            <Text style={[styles.mobileSectionTitle, { marginTop: 12 }]}>Checklist</Text>
+            {checklists.map((hub) => {
+              const activeTasks = tasks.filter((t) => t.category === hub.id && !t.isCompleted).length;
+              return (
+                <AnimatedButton
+                  key={hub.id}
+                  style={[styles.mobileHubCard, { backgroundColor: hub.bgColor, borderColor: hub.borderColor }]}
+                  onPress={() => onSelectHub(hub)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.mobileHubLeft}>
+                    <View style={[styles.hubIconBox, { backgroundColor: hub.glowColor }]}>
+                      <Feather name={hub.iconName as any} size={18} color={hub.color} />
+                    </View>
+                    <View>
+                      <Text style={styles.hubTitleMobile}>{hub.title}</Text>
+                      <Text style={styles.mobileHubSubtitle}>{hub.subtitle}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.mobileHubRight}>
+                    <Text style={[styles.mobileHubCount, { color: hub.color }]}>{activeTasks}</Text>
+                    <Text style={styles.mobileHubCountLabel}>aktif</Text>
+                  </View>
+                </AnimatedButton>
+              );
+            })}
+          </>
+        )}
 
         {/* Smart Task List (mobile) */}
         <View style={[styles.listHeaderRow, { marginTop: 12, paddingHorizontal: 4 }]}>
@@ -850,6 +974,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
   mobileContentInner: { padding: 12, paddingBottom: 100, gap: 8 },
+  mobileSectionTitle: { color: COLORS.white, fontSize: 13, fontWeight: '700', marginBottom: 6, marginTop: 8, paddingHorizontal: 4 },
 
   statsRow: { flexDirection: 'row', gap: 6, marginBottom: 2 },
   statPill: {
@@ -858,6 +983,45 @@ const styles = StyleSheet.create({
   },
   statPillNum: { fontSize: 18, fontWeight: '800' },
   statPillLabel: { color: COLORS.textDim, fontSize: 9, marginTop: 2, fontWeight: '500' },
+
+  splitStatCard: {
+    backgroundColor: COLORS.bgCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 2,
+    overflow: 'hidden',
+  },
+  splitStatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  splitStatIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitStatTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  splitStatPct: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  splitStatRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 2,
+  },
+  splitStatSub: {
+    color: COLORS.textDim,
+    fontSize: 10,
+  },
 
   mobileHubCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -885,4 +1049,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.borderLight, borderStyle: 'dashed'
   },
   emptyText: { color: COLORS.textMuted, fontSize: 12, marginTop: 8 },
+  taskCheckbox: {
+    padding: 6,
+  },
+  taskActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  taskActionBtn: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: COLORS.bgInput,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginLeft: 4,
+  },
 });

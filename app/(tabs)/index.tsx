@@ -72,6 +72,18 @@ export default function App() {
 
   useEffect(() => {
     if (activeScreenKey !== displayScreenKey) {
+      // On web: ALWAYS swap screens instantly without animation.
+      // Animated callbacks are unreliable during SSR hydration on static web exports,
+      // which causes opacity to get stuck at 0 (content invisible but present).
+      if (Platform.OS === 'web') {
+        setDisplayScreen(currentScreen);
+        setDisplayHub(selectedHub);
+        setDisplayScreenKey(activeScreenKey);
+        screenFadeAnim.setValue(1);
+        screenSlideAnim.setValue(0);
+        return;
+      }
+
       if (
         activeScreenKey === 'loading' ||
         displayScreenKey === 'loading' ||
@@ -84,52 +96,32 @@ export default function App() {
         screenFadeAnim.setValue(1);
         screenSlideAnim.setValue(0);
       } else if (displayScreenKey === 'auth' && activeScreenKey === 'dashboard') {
-        // Fast, premium fade-and-lift transition from Auth to Dashboard
-        if (Platform.OS !== 'web') {
-          Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
-            setDisplayScreen(currentScreen);
-            setDisplayHub(selectedHub);
-            setDisplayScreenKey(activeScreenKey);
-            screenSlideAnim.setValue(-5); // Very subtle lift
-            Animated.parallel([
-              Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-              Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: true })
-            ]).start();
-          });
-        } else {
-          // Simple Web Fade
-          Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: false }).start(() => {
-            setDisplayScreen(currentScreen);
-            setDisplayHub(selectedHub);
-            setDisplayScreenKey(activeScreenKey);
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: false }).start();
-          });
-        }
-      } else {
-        // Standard interactive transition for hubs and screens
-        if (Platform.OS !== 'web') {
+        // Fast, premium fade-and-lift transition from Auth to Dashboard (native only)
+        Animated.timing(screenFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+          setDisplayScreen(currentScreen);
+          setDisplayHub(selectedHub);
+          setDisplayScreenKey(activeScreenKey);
+          screenSlideAnim.setValue(-5); // Very subtle lift
           Animated.parallel([
-            Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-            Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: true })
-          ]).start(() => {
-            setDisplayScreen(currentScreen);
-            setDisplayHub(selectedHub);
-            setDisplayScreenKey(activeScreenKey);
-            screenSlideAnim.setValue(-10);
-            Animated.parallel([
-              Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-              Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: true })
-            ]).start();
-          });
-        } else {
-          // Simple Web Fade
-          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: false }).start(() => {
-            setDisplayScreen(currentScreen);
-            setDisplayHub(selectedHub);
-            setDisplayScreenKey(activeScreenKey);
-            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: false }).start();
-          });
-        }
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+            Animated.spring(screenSlideAnim, { toValue: 0, tension: 150, friction: 12, useNativeDriver: true })
+          ]).start();
+        });
+      } else {
+        // Standard interactive transition for hubs and screens (native only)
+        Animated.parallel([
+          Animated.timing(screenFadeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+          Animated.timing(screenSlideAnim, { toValue: 10, duration: 100, useNativeDriver: true })
+        ]).start(() => {
+          setDisplayScreen(currentScreen);
+          setDisplayHub(selectedHub);
+          setDisplayScreenKey(activeScreenKey);
+          screenSlideAnim.setValue(-10);
+          Animated.parallel([
+            Animated.timing(screenFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+            Animated.spring(screenSlideAnim, { toValue: 0, tension: 120, friction: 14, useNativeDriver: true })
+          ]).start();
+        });
       }
     }
   }, [activeScreenKey, currentScreen, selectedHub, isLoggingOut]);
@@ -165,6 +157,9 @@ export default function App() {
       },
       (error) => {
         console.error('Profile Fetch Error:', error);
+        setProfile(null);
+        setAuthError('Gagal memuat profil: Akses Firebase ditolak (Missing/Insufficient Permissions). Pastikan aturan keamanan (Security Rules) Firestore Anda sudah diatur.');
+        setCurrentScreen('auth');
       }
     );
 
@@ -187,7 +182,10 @@ export default function App() {
         });
         setTasks(taskList);
       },
-      (error) => console.error('Tasks Fetch Error:', error)
+      (error) => {
+        console.error('Tasks Fetch Error:', error);
+        toast.error('Gagal sinkronisasi tugas', 'Akses ke Firestore dibatasi.');
+      }
     );
 
     return () => {
@@ -374,6 +372,32 @@ export default function App() {
     [user, editingTask, toast]
   );
 
+  const handleQuickAddTask = useCallback(
+    async (title: string, categoryId: string) => {
+      if (!user || !title.trim()) return;
+      try {
+        const tasksRef = collection(db, 'artifacts', APP_ID, 'users', user.uid, 'tasks');
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        const deadline = now.toISOString().slice(0, 16); // default to today
+        
+        await addDoc(tasksRef, {
+          title: title.trim(),
+          notes: '',
+          category: categoryId,
+          deadline,
+          priority: 'low' as Priority,
+          isCompleted: false,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('Error saving quick task:', error);
+        toast.error('Gagal menambahkan item', 'Silakan coba lagi.');
+      }
+    },
+    [user, toast]
+  );
+
   const toggleTaskStatus = useCallback(async (taskId: string, currentStatus: boolean) => {
     if (!user) return;
     try {
@@ -433,6 +457,8 @@ export default function App() {
             onAddTask={() => handleOpenTaskModal()}
             onCreateHub={handleCreateHub}
             onEditTask={handleOpenTaskModal}
+            onToggleTask={toggleTaskStatus}
+            onDeleteTask={deleteTask}
           />
         );
       case 'hub':
@@ -446,6 +472,7 @@ export default function App() {
             onEditTask={handleOpenTaskModal}
             onOpenTaskModal={() => handleOpenTaskModal()}
             onDeleteHub={handleDeleteHub}
+            onQuickAddTask={handleQuickAddTask}
           />
         ) : null;
       case 'profile':
@@ -492,7 +519,13 @@ export default function App() {
         )}
 
         <View style={{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }}>
-          <Animated.View style={{ flex: 1, opacity: screenFadeAnim, transform: Platform.OS === 'web' ? [] : [{ translateY: screenSlideAnim }] }}>
+          <Animated.View style={[
+            { flex: 1 },
+            // On web: always opacity 1 — never let animation leave content invisible
+            Platform.OS === 'web'
+              ? { opacity: 1 }
+              : { opacity: screenFadeAnim, transform: [{ translateY: screenSlideAnim }] }
+          ]}>
             {renderScreen()}
           </Animated.View>
         </View>

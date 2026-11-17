@@ -24,6 +24,7 @@ export default function CreateHubModal({ isOpen, onClose, onSave }: CreateHubMod
   const [subtitle, setSubtitle] = useState('');
   const [iconName, setIconName] = useState(PRESET_ICONS[0]);
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+  const [type, setType] = useState<'workspace' | 'checklist'>('workspace');
 
   if (!isOpen) return null;
 
@@ -33,13 +34,14 @@ export default function CreateHubModal({ isOpen, onClose, onSave }: CreateHubMod
     const newHub: Hub = {
       id: `hub_${Date.now()}`,
       title: title.trim(),
-      subtitle: subtitle.trim() || 'Custom List',
+      subtitle: subtitle.trim() || (type === 'checklist' ? 'Checklist Sederhana' : 'Custom Workspace'),
       iconName,
       color: selectedColor.color,
       bgColor: selectedColor.bgColor,
       borderColor: selectedColor.borderColor,
       accentColor: selectedColor.color,
       glowColor: selectedColor.glowColor,
+      type,
     };
     onSave(newHub);
     
@@ -48,6 +50,7 @@ export default function CreateHubModal({ isOpen, onClose, onSave }: CreateHubMod
     setSubtitle('');
     setIconName(PRESET_ICONS[0]);
     setSelectedColor(PRESET_COLORS[0]);
+    setType('workspace');
     onClose();
   };
 
@@ -88,6 +91,25 @@ export default function CreateHubModal({ isOpen, onClose, onSave }: CreateHubMod
               />
             </View>
 
+            {/* Type Selector */}
+            <Text style={styles.label}>Tipe List</Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
+                style={[styles.typeOption, type === 'workspace' && styles.typeSelected]}
+                onPress={() => setType('workspace')}
+              >
+                <Feather name="layers" size={16} color={type === 'workspace' ? COLORS.amber : COLORS.textDim} />
+                <Text style={[styles.typeOptionText, type === 'workspace' && { color: COLORS.amber }]}>Workspace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeOption, type === 'checklist' && styles.typeSelected]}
+                onPress={() => setType('checklist')}
+              >
+                <Feather name="check-square" size={16} color={type === 'checklist' ? COLORS.amber : COLORS.textDim} />
+                <Text style={[styles.typeOptionText, type === 'checklist' && { color: COLORS.amber }]}>Checklist</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Icon & Color Preview */}
             <View style={styles.previewBox}>
               <View style={[styles.previewIconWrap, { backgroundColor: selectedColor.bgColor, borderColor: selectedColor.borderColor }]}>
@@ -95,7 +117,7 @@ export default function CreateHubModal({ isOpen, onClose, onSave }: CreateHubMod
               </View>
               <View>
                 <Text style={styles.previewTitle}>{title || 'Nama List'}</Text>
-                <Text style={styles.previewSubtitle}>{subtitle || 'Custom List'}</Text>
+                <Text style={styles.previewSubtitle}>{subtitle || (type === 'checklist' ? 'Checklist Sederhana' : 'Custom Workspace')}</Text>
               </View>
             </View>
 
@@ -184,6 +206,28 @@ const styles = StyleSheet.create({
   iconOption: {
     width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.bgInput, borderWidth: 1, borderColor: COLORS.borderLight,
+  },
+  typeRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  typeOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.bgInput,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  typeSelected: {
+    borderColor: COLORS.amber,
+    backgroundColor: 'rgba(245, 158, 11, 0.05)',
+  },
+  typeOptionText: {
+    color: COLORS.textDim,
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   footer: {
